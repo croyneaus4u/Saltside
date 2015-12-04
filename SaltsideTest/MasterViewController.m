@@ -9,9 +9,18 @@
 #import "MasterViewController.h"
 #import "DetailViewController.h"
 
+#import "STApiCallHandler.h"
+#import "STTableViewCell.h"
+#import "STItemObject.h"
+
+#define kURL_STRING @"https://gist.githubusercontent.com/maclir/f715d78b49c3b4b3b77f/raw/8854ab2fe4cbe2a5919cea97d71b714ae5a4838d/items.json"
+
+#define LOAD_DATA_USING_OBJECT_MAPPING 0  // change this value to 0 to load data using AS-IS Data using dictionaries
+
 @interface MasterViewController ()
 
 @property NSMutableArray *objects;
+
 @end
 
 @implementation MasterViewController
@@ -23,10 +32,49 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
-    self.navigationItem.leftBarButtonItem = self.editButtonItem;
+    self.view.backgroundColor = [UIColor lightGrayColor];
+    
+    [self loadDataFromServer];
+}
 
-    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd target:self action:@selector(insertNewObject:)];
-    self.navigationItem.rightBarButtonItem = addButton;
+- (void)loadDataFromServer {
+#if LOAD_DATA_USING_OBJECT_MAPPING
+    [self loadDataUsingObjectMapping];
+#else
+    [self loadDataUsingObjectMapping];
+#endif
+}
+
+- (void)loadDataUsingPlainDictionary {
+    __weak typeof(self) weakSelf = self;
+    
+    // this method returns Dictionary objects ..
+    [[STApiCallHandler sharedInstance] getDataFromURLString:kURL_STRING withCompletionHandler:^(BOOL success, id object) {
+        if (success) {
+            weakSelf.objects = object;
+            [self.tableView reloadData];
+        } else {
+            NSError *error = (NSError*)object;
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Error" message:[error localizedDescription] delegate:nil cancelButtonTitle:nil otherButtonTitles:@"OK", nil];
+            [alert show];
+        }
+    }];
+}
+
+- (void)loadDataUsingObjectMapping {
+    __weak typeof(self) weakSelf = self;
+    
+    // this method returns MApped STItemObject objects ..
+    [[STApiCallHandler sharedInstance] getDataFromURLString:kURL_STRING withItemClass:[STItemObject class] withCompletionHandler:^(BOOL success, id object) {
+        if (success) {
+            weakSelf.objects = object;
+            [self.tableView reloadData];
+        } else {
+            NSError *error = (NSError*)object;
+            UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"Error" message:[error localizedDescription] delegate:nil cancelButtonTitle:nil otherButtonTitles:@"OK", nil];
+            [alert show];
+        }
+    }];
 }
 
 - (void)didReceiveMemoryWarning {
@@ -34,21 +82,12 @@
     // Dispose of any resources that can be recreated.
 }
 
-- (void)insertNewObject:(id)sender {
-    if (!self.objects) {
-        self.objects = [[NSMutableArray alloc] init];
-    }
-    [self.objects insertObject:[NSDate date] atIndex:0];
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
-    [self.tableView insertRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-}
-
 #pragma mark - Segues
 
 - (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
     if ([[segue identifier] isEqualToString:@"showDetail"]) {
         NSIndexPath *indexPath = [self.tableView indexPathForSelectedRow];
-        NSDate *object = self.objects[indexPath.row];
+        id object = self.objects[indexPath.row];
         [[segue destinationViewController] setDetailItem:object];
     }
 }
@@ -64,11 +103,27 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell" forIndexPath:indexPath];
+    STTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell" forIndexPath:indexPath];
 
-    NSDate *object = self.objects[indexPath.row];
-    cell.textLabel.text = [object description];
+    id object = self.objects[indexPath.row];
+    if ([object isKindOfClass:[NSDictionary class]]) {
+        cell.titleLabel.text = object[kTitle];
+        cell.descriptionLabel.text = object[kDescription];
+    } else if ([object isKindOfClass:[STItemObject class]]) {
+        cell.titleLabel.text = [object title];
+        cell.descriptionLabel.text = [object itemDescription];
+    }
+    
     return cell;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return UITableViewAutomaticDimension;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView estimatedHeightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    CGFloat height = 100;
+    return height;
 }
 
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
